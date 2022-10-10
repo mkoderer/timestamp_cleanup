@@ -39,6 +39,8 @@ parser.add_argument('--path', default='./', help='Path to scan (default PWD)')
 parser.add_argument('-d', '--dry-run', action='store_true', help='Dry-run only')
 parser.add_argument('-t', '--time-difference', default=3600, type=int,  help='Minimum time difference')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
+parser.add_argument('-e', '--extension',  help='Extension to filter (default: all supported video and image extensions')
+parser.add_argument('--list-extensions',  action='store_true', help='List default extensions')
 
 args = parser.parse_args()
 
@@ -53,6 +55,17 @@ def progress(count, total, status=''):
     sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', status))
     sys.stdout.flush()  # As suggested by Rom Ruben (see: http://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console/27871113#comment50529068_27871113)
 
+
+def get_valid_file_extensions():
+    if args.extension:
+        return [args.extension]
+    else:
+        ext = []
+        for img in filetype.image_matchers:
+            ext.append(img.extension)
+        for vid in filetype.video_matchers:
+            ext.append(vid.extension)
+        return ext
 
 def check_exif_get_time(file):
     if filetype.is_image(file):
@@ -69,7 +82,8 @@ def check_exif_get_time(file):
 def correct_files(path):
     print ("Checking path: %s" % path)
     for root, dirs, files in os.walk(path):
-        stats[root] = {"number_of_files": len(files),
+        stats[root] = {"number_of_total_files": len(files),
+                       "number_of_files": 0,
                        "number_of_dir": len(dirs),
                        "found_wrong_ts": 0,
                        "corrected_with_file": 0,
@@ -77,11 +91,15 @@ def correct_files(path):
                        "dry_run": args.dry_run}
         for c, file in enumerate(files):
             progress(c, len(files))
+            extension = get_valid_file_extensions()
             if file.startswith("."):
                 continue
-            
+            if not os.path.splitext(file) in get_valid_file_extensions():
+                continue
+
             file_timestamp = None
             correction_method = None
+            stat[root]["number_of_files"] += 1
             if args.debug:
                 print ("Checking File: %s" %file)
             stat = os.stat(os.path.join(root, file))
@@ -126,5 +144,8 @@ def correct_files(path):
                         os.utime(os.path.join(root, file), (file_timestamp, file_timestamp))
 
 if __name__ == "__main__":
-    correct_files(args.path)
-    pprint.pprint(stats)
+    if args.list_extensions:
+        pprint.pprint(get_valid_file_extensions())
+    else:
+        correct_files(args.path)
+        pprint.pprint(stats)
